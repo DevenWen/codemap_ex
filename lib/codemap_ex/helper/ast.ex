@@ -1,5 +1,7 @@
 defmodule CodemapEx.Helper.Ast do
-  alias CodemapEx.Block.{Mod, Func, Call}
+  @moduledoc false
+
+  alias CodemapEx.Block.{Mod, Func, Call, Attr}
 
   @doc """
   读取某个模块的源码，并编译成AST代码。
@@ -84,11 +86,20 @@ defmodule CodemapEx.Helper.Ast do
       ) do
     module_name = Module.concat(module_parts)
 
-    function_blocks = Enum.map(functions, &extract_function_block/1)
+    function_blocks =
+      functions
+      |> Enum.map(&extract_function_block/1)
+      |> Enum.filter(&(&1 != :ignore))
+
+    attrs_blocks =
+      functions
+      |> Enum.map(&extract_attrs/1)
+      |> Enum.filter(&(&1 != :ignore))
 
     %Mod{
       name: module_name,
-      children: function_blocks
+      children: function_blocks,
+      attrs: attrs_blocks
     }
   end
 
@@ -112,6 +123,17 @@ defmodule CodemapEx.Helper.Ast do
       calls: calls
     }
   end
+
+  defp extract_function_block(_), do: :ignore
+
+  defp extract_attrs({:@, _, [{key, _, [value]}]}) do
+    %Attr{
+      key: key,
+      value: value
+    }
+  end
+
+  defp extract_attrs(_), do: :ignore
 
   # 从函数体中提取函数调用
   defp extract_calls({{:., _, [{:__aliases__, _, module_parts}, function_name]}, _, args}) do

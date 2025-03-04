@@ -18,15 +18,17 @@ defmodule CodemapEx.Block do
 end
 
 defmodule CodemapEx.Block.Mod do
+  @moduledoc false
   defstruct(
     CodemapEx.Block.__struct__()
-    |> Map.merge(%{type: :module})
+    |> Map.merge(%{type: :module, attrs: []})
     |> Map.from_struct()
     |> Keyword.new()
   )
 end
 
 defmodule CodemapEx.Block.Func do
+  @moduledoc false
   defstruct(
     CodemapEx.Block.__struct__()
     |> Map.merge(%{type: :function})

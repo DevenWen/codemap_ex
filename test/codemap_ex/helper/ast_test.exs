@@ -51,6 +51,11 @@ defmodule CodemapEx.Helper.AstTest do
       assert block.name == Test.Support.Math
       assert length(block.children) == 2
 
+      # 验证 attrs
+      assert length(block.attrs) == 1
+      assert hd(block.attrs).key == :moduledoc
+      assert hd(block.attrs).value =~ "This is a module for math operations."
+
       # 验证函数信息
       [func1, func2] = Enum.sort_by(block.children, & &1.name)
 
