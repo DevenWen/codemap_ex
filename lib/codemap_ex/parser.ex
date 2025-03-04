@@ -5,5 +5,6 @@ defmodule CodemapEx.Parser do
 
   def parse_ast() do
   end
+
   def parse_ast(ast), do: ast
 end

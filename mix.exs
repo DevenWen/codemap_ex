@@ -25,9 +25,9 @@ defmodule CodemapEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:patch, "~> 0.15.0", only: :test}
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:patch, "~> 0.15.0", only: :test},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false}
     ]
   end
 end
