@@ -1,0 +1,4 @@
+%{
+  "meck": {:hex, :meck, "0.9.2", "85ccbab053f1db86c7ca240e9fc718170ee5bda03810a6292b5306bf31bae5f5", [:rebar3], [], "hexpm", "81344f561357dc40a8344afa53767c32669153355b626ea9fcbc8da6b3045826"},
+  "patch": {:hex, :patch, "0.15.0", "947dd6a8b24a2d2d1137721f20bb96a8feb4f83248e7b4ad88b4871d52807af5", [:mix], [], "hexpm", "e8dadf9b57b30e92f6b2b1ce2f7f57700d14c66d4ed56ee27777eb73fb77e58d"},
+}
