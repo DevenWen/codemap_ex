@@ -1,21 +1,10 @@
-# CodemapEx
+# CodeMapEx
+ 
+CodeMapEx is an Elixir AST analysis library for building code maps and analyzing code structures. By analyzing Elixir code and its AST (Abstract Syntax Tree), CodeMap helps you understand which Elixir methods are called by each code block, providing visualization and analysis capabilities for code dependencies.
 
-**TODO: Add description**
+## Features
 
-## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `codemap_ex` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:codemap_ex, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/codemap_ex>.
-
+- Convert Elixir modules to AST
+- Analyze AST and build structured code maps
+- Identify relationships between modules, functions, and method calls
+- Support for complex code structures and nested call analysis
