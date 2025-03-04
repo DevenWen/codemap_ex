@@ -1,7 +1,7 @@
 defmodule CodemapEx.Helper.Ast do
   @moduledoc false
 
-  alias CodemapEx.Block.{Mod, Func, Call, Attr}
+  alias CodemapEx.Block.{Call, Func, Mod, Attr}
 
   @doc """
   读取某个模块的源码，并编译成AST代码。
