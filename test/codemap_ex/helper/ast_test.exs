@@ -49,7 +49,7 @@ defmodule CodemapEx.Helper.AstTest do
       # 验证模块信息
       assert block.__struct__ == CodemapEx.Block.Mod
       assert block.name == Test.Support.Math
-      assert length(block.children) == 2
+      assert length(block.children) == 3
 
       # 验证 attrs
       assert length(block.attrs) == 1
@@ -57,15 +57,19 @@ defmodule CodemapEx.Helper.AstTest do
       assert hd(block.attrs).value =~ "This is a module for math operations."
 
       # 验证函数信息
-      [func1, func2] = Enum.sort_by(block.children, & &1.name)
+      [func1, func2, func3] = Enum.sort_by(block.children, & &1.name)
 
       assert func1.__struct__ == CodemapEx.Block.Func
       assert func1.name == :add
       assert length(func1.calls) == 1
 
       assert func2.__struct__ == CodemapEx.Block.Func
-      assert func2.name == :subtract
+      assert func2.name == :add2
       assert length(func2.calls) == 1
+
+      assert func3.__struct__ == CodemapEx.Block.Func
+      assert func3.name == :subtract
+      assert length(func3.calls) == 1
 
       # 验证调用信息
       add_call = hd(func1.calls)
@@ -77,7 +81,7 @@ defmodule CodemapEx.Helper.AstTest do
       subtract_call = hd(func2.calls)
       assert subtract_call.__struct__ == CodemapEx.Block.Call
       assert subtract_call.module == nil
-      assert subtract_call.name == :-
+      assert subtract_call.name == :add
       assert subtract_call.arity == 2
     end
 
@@ -134,6 +138,160 @@ defmodule CodemapEx.Helper.AstTest do
 
       # 注意：这个测试可能需要根据 extract_calls 的实际实现调整
       # 因为管道操作的 AST 结构比较复杂
+    end
+
+    test "处理管道操作" do
+      pipe_ast =
+        Code.string_to_quoted!("""
+        defmodule Test.Pipe do
+          def process(data) do
+            data
+            |> String.upcase()
+            |> String.trim()
+          end
+        end
+        """)
+
+      block = Ast.ast_to_block(pipe_ast)
+
+      # 验证基本结构
+      assert block.__struct__ == CodemapEx.Block.Mod
+      assert block.name == Test.Pipe
+
+      # 验证函数
+      func = hd(block.children)
+      assert func.name == :process
+
+      # 验证调用 - 管道操作应该识别出两个 String 模块的调用
+      calls = func.calls
+      assert length(calls) == 2
+
+      # 验证调用顺序（管道顺序）
+      [call1, call2] = calls
+      assert call1.module == String
+      assert call1.name == :upcase
+      assert call1.arity == 1
+
+      assert call2.module == String
+      assert call2.name == :trim
+      assert call2.arity == 1
+    end
+
+    test "处理别名调用" do
+      alias_ast =
+        Code.string_to_quoted!("""
+        defmodule Test.AliasCall do
+          alias String, as: Str
+          alias List
+          
+          def transform(data) do
+            Str.upcase(data)
+            List.flatten(["a", ["b"]])
+          end
+        end
+        """)
+
+      block = Ast.ast_to_block(alias_ast)
+
+      # 验证函数
+      func = hd(block.children)
+
+      # 验证调用 - 应该正确识别别名
+      assert length(func.calls) == 2
+
+      [call1, call2] = func.calls
+      # 应解析 Str 别名为实际模块
+      assert call1.module == String
+      assert call1.name == :upcase
+
+      assert call2.module == List
+      assert call2.name == :flatten
+    end
+
+    test "处理 with 语句中的调用" do
+      with_ast =
+        Code.string_to_quoted!("""
+        defmodule Test.WithStatement do
+          def process(data) do
+            with {:ok, a} <- String.upcase(data),
+                 {:ok, b} <- String.trim(a) do
+              b
+            end
+          end
+        end
+        """)
+
+      block = Ast.ast_to_block(with_ast)
+
+      # 验证函数
+      func = hd(block.children)
+
+      # 验证 with 语句中的调用
+      calls = func.calls
+      assert length(calls) == 2
+
+      [call1, call2] = calls
+      assert call1.module == String
+      assert call1.name == :upcase
+
+      assert call2.module == String
+      assert call2.name == :trim
+    end
+
+    test "处理递归调用" do
+      recursive_ast =
+        Code.string_to_quoted!("""
+        defmodule Test.Recursive do
+          def factorial(0), do: 1
+          def factorial(n) do
+            n * factorial(n-1)
+          end
+        end
+        """)
+
+      block = Ast.ast_to_block(recursive_ast)
+
+      # 获取第二个函数子句（递归调用在这里）
+      func = Enum.at(block.children, 1)
+
+      # 验证递归调用
+      assert Enum.any?(func.calls, fn call ->
+               call.name == :factorial and call.arity == 1
+             end)
+    end
+
+    test "处理实际的 Test.Support.Caller 模块" do
+      ast = Ast.module_to_ast(Test.Support.Caller)
+      block = Ast.ast_to_block(ast)
+
+      # 验证模块结构
+      assert block.__struct__ == CodemapEx.Block.Mod
+      assert block.name == Test.Support.Caller
+
+      # 找到特定函数并验证其调用
+      foo_func = Enum.find(block.children, &(&1.name == :foo))
+      assert foo_func
+      assert length(foo_func.calls) == 1
+      call = hd(foo_func.calls)
+      assert call.module == Test.Support.Math
+      assert call.name == :add
+      assert call.arity == 2
+
+      # 验证 alias_call 函数
+      alias_func = Enum.find(block.children, &(&1.name == :alias_call))
+      assert alias_func
+      assert length(alias_func.calls) >= 2
+
+      # 验证递归函数
+      recursive_func = Enum.find(block.children, &(&1.name == :recursive_call))
+      assert recursive_func
+
+      recursive_calls =
+        Enum.filter(recursive_func.calls, fn call ->
+          call.name == :recursive_call
+        end)
+
+      assert length(recursive_calls) == 1
     end
   end
 end

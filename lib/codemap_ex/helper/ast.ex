@@ -86,9 +86,12 @@ defmodule CodemapEx.Helper.Ast do
       ) do
     module_name = Module.concat(module_parts)
 
+    # 收集模块中的所有别名定义
+    aliases = extract_aliases(functions)
+
     function_blocks =
       functions
-      |> Enum.map(&extract_function_block/1)
+      |> Enum.map(&extract_function_block(&1, aliases))
       |> Enum.filter(&(&1 != :ignore))
 
     attrs_blocks =
@@ -106,17 +109,72 @@ defmodule CodemapEx.Helper.Ast do
   def ast_to_block({:defmodule, _, [{:__aliases__, _, module_parts}, [do: single_function]]}) do
     module_name = Module.concat(module_parts)
 
-    function_blocks = [extract_function_block(single_function)]
+    # 单个函数模式下的别名
+    aliases = extract_aliases([single_function])
+
+    function_blocks =
+      case extract_function_block(single_function, aliases) do
+        :ignore -> []
+        func -> [func]
+      end
+
+    attrs_blocks =
+      case extract_attrs(single_function) do
+        :ignore -> []
+        attr -> [attr]
+      end
 
     %Mod{
       name: module_name,
-      children: function_blocks
+      children: function_blocks,
+      attrs: attrs_blocks
     }
   end
 
+  # 提取模块中的别名定义
+  defp extract_aliases(functions) do
+    Enum.reduce(functions, %{}, fn
+      # 处理简单别名: alias String
+      {:alias, _, [{:__aliases__, _, module_parts}]}, acc ->
+        module = Module.concat(module_parts)
+        last_part = List.last(module_parts)
+        Map.put(acc, last_part, module)
+
+      # 处理带 as 的别名: alias String, as: Str
+      {:alias, _, [{:__aliases__, _, module_parts}, [as: {:__aliases__, _, [as_name]}]]}, acc ->
+        module = Module.concat(module_parts)
+        Map.put(acc, as_name, module)
+
+      # 处理多别名: alias Test.Support.{Math, SingleFunction}
+      {:alias, _, [{:__block__, _, [{{:., _, [{:__aliases__, _, prefix}, :{}]}, _, parts}]}]}, acc ->
+        prefix_mod = Module.concat(prefix)
+
+        Enum.reduce(parts, acc, fn {:__aliases__, _, [name]}, inner_acc ->
+          full_module = Module.concat([prefix_mod, name])
+          Map.put(inner_acc, name, full_module)
+        end)
+
+      _, acc ->
+        acc
+    end)
+  end
+
   # 从函数定义AST中提取函数块
-  defp extract_function_block({:def, _, [{name, _, _args}, [do: body]]}) do
-    calls = extract_calls(body)
+  defp extract_function_block(
+         {:def, _, [{name, _, _}, [do: _body, defaults: _defaults]]},
+         _aliases
+       ) do
+    %Func{
+      name: name,
+      # 在后续版本中处理默认参数的调用
+      calls: []
+    }
+  end
+
+  # 支持函数特定格式 def func(), do: expr
+  defp extract_function_block({:def, _, [{name, _, _args}, [do: body]]}, aliases)
+       when is_atom(name) do
+    calls = extract_calls(body, aliases)
 
     %Func{
       name: name,
@@ -124,7 +182,7 @@ defmodule CodemapEx.Helper.Ast do
     }
   end
 
-  defp extract_function_block(_), do: :ignore
+  defp extract_function_block(_, _), do: :ignore
 
   defp extract_attrs({:@, _, [{key, _, [value]}]}) do
     %Attr{
@@ -135,21 +193,105 @@ defmodule CodemapEx.Helper.Ast do
 
   defp extract_attrs(_), do: :ignore
 
-  # 从函数体中提取函数调用
-  defp extract_calls({{:., _, [{:__aliases__, _, module_parts}, function_name]}, _, args}) do
-    module = Module.concat(module_parts)
-    [%Call{module: module, name: function_name, arity: length(args)}]
+  # 从函数体中提取函数调用，使用别名映射
+
+  # 处理模块函数调用 (Module.function(...)) 
+  defp extract_calls(
+         {{:., _, [{:__aliases__, _, module_parts}, function_name]}, _, args},
+         aliases
+       ) do
+    # 检查是否是别名
+    module =
+      case module_parts do
+        [part] ->
+          # 可能是别名
+          Map.get(aliases, part, Module.concat(module_parts))
+
+        _ ->
+          # 完整模块路径
+          Module.concat(module_parts)
+      end
+
+    calls_in_args = Enum.flat_map(args, &extract_calls(&1, aliases))
+    [%Call{module: module, name: function_name, arity: length(args)} | calls_in_args]
   end
 
-  defp extract_calls({function_name, _, args}) when is_atom(function_name) and is_list(args) do
-    [%Call{module: nil, name: function_name, arity: length(args)}]
+  # 处理 |> 管道操作符
+  defp extract_calls({:|>, _, [left, right]}, aliases) do
+    left_calls = extract_calls(left, aliases)
+
+    # 管道右侧通常是函数调用
+    right_calls =
+      case right do
+        # 处理标准形式：expr |> Mod.func()
+        {{:., _, [{:__aliases__, _, module_parts}, function_name]}, _, args} ->
+          # 解析可能的别名
+          module =
+            case module_parts do
+              [part] -> Map.get(aliases, part, Module.concat(module_parts))
+              _ -> Module.concat(module_parts)
+            end
+
+          [%Call{module: module, name: function_name, arity: length(args) + 1}]
+
+        # 处理无参数形式：expr |> func
+        {function_name, _, nil} when is_atom(function_name) ->
+          [%Call{module: nil, name: function_name, arity: 1}]
+
+        # 处理其他形式
+        _ ->
+          extract_calls(right, aliases)
+      end
+
+    left_calls ++ right_calls
   end
 
-  defp extract_calls({:__block__, _, expressions}) do
-    Enum.flat_map(expressions, &extract_calls/1)
+  # 处理 with 表达式
+  defp extract_calls({:with, _, clauses}, aliases) do
+    Enum.flat_map(clauses, fn
+      # <- 操作符左侧的模式，右侧的表达式
+      {:<-, _, [_pattern, expr]} -> extract_calls(expr, aliases)
+      # do 块
+      {:do, block} -> extract_calls(block, aliases)
+      # else 块
+      {:else, block} -> extract_calls(block, aliases)
+      # 其他表达式
+      expr -> extract_calls(expr, aliases)
+    end)
   end
 
-  defp extract_calls(_) do
-    []
+  # 处理元组
+  defp extract_calls({left, right}, aliases) do
+    extract_calls(left, aliases) ++ extract_calls(right, aliases)
   end
+
+  # 处理元组的另一种形式
+  defp extract_calls({:{}, _, elements}, aliases) do
+    Enum.flat_map(elements, &extract_calls(&1, aliases))
+  end
+
+  # 处理列表
+  defp extract_calls(list, aliases) when is_list(list) do
+    Enum.flat_map(list, &extract_calls(&1, aliases))
+  end
+
+  # 处理代码块
+  defp extract_calls({:__block__, _, expressions}, aliases) do
+    Enum.flat_map(expressions, &extract_calls(&1, aliases))
+  end
+
+  # 处理普通函数调用 (function(...))
+  defp extract_calls({function_name, _, args}, aliases)
+       when is_atom(function_name) and is_list(args) do
+    call = %Call{module: nil, name: function_name, arity: length(args)}
+
+    # 收集参数中的调用
+    arg_calls = Enum.flat_map(args, &extract_calls(&1, aliases))
+
+    [call | arg_calls]
+  end
+
+  # 处理基本类型和无法识别的模式
+  defp extract_calls(expr, _) when is_number(expr) or is_binary(expr) or is_atom(expr), do: []
+  defp extract_calls(_, _), do: []
 end

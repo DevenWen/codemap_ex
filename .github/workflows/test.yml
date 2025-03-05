@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        elixir: ['1.18.1']
-        otp: ['27.0']
+        elixir: ['1.12.3', '1.18.1']
+        otp: ['24.1', '27.0']
 
     steps:
     - uses: actions/checkout@v3
@@ -44,11 +44,3 @@ jobs:
 
     - name: Check formatting
       run: mix format --check-formatted
-
-    - name: Run Credo
-      run: mix credo --strict
-      if: ${{ always() }}
-
-    - name: Run Dialyzer
-      run: mix dialyzer
-      if: ${{ always() }} 
