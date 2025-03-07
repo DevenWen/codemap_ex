@@ -74,13 +74,13 @@ defmodule CodemapEx.Helper.AstTest do
       # 验证调用信息
       add_call = hd(func1.calls)
       assert add_call.__struct__ == CodemapEx.Block.Call
-      assert add_call.module == nil
+      assert add_call.module == Kernel
       assert add_call.name == :+
       assert add_call.arity == 2
 
       subtract_call = hd(func2.calls)
       assert subtract_call.__struct__ == CodemapEx.Block.Call
-      assert subtract_call.module == nil
+      assert subtract_call.module == Test.Support.Math
       assert subtract_call.name == :add
       assert subtract_call.arity == 2
     end
@@ -105,7 +105,7 @@ defmodule CodemapEx.Helper.AstTest do
       # 验证调用信息 - 乘法操作
       call = hd(func.calls)
       assert call.__struct__ == CodemapEx.Block.Call
-      assert call.module == nil
+      assert call.module == Kernel
       assert call.name == :*
       assert call.arity == 2
     end

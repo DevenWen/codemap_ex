@@ -32,6 +32,7 @@ defmodule CodemapEx.Block.Func do
   defstruct(
     CodemapEx.Block.__struct__()
     |> Map.merge(%{type: :function})
+    |> Map.merge(%{source_code: ""})
     |> Map.from_struct()
     |> Keyword.new()
   )

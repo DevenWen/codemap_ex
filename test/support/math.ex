@@ -22,8 +22,9 @@ defmodule Test.Support.Caller do
   def foo2() do
     # 连续调用
     with a <- Test.Support.Math.add(1, 2),
-         b <- Test.Support.Math.subtract(a, 1) do
-      a + b
+         b <- Test.Support.Math.subtract(a, 1),
+         c <- Test.Support.Math.add2(b) do
+      a + b + c
     end
   end
 
@@ -51,6 +52,18 @@ defmodule Test.Support.Caller do
 
   def call_default_param() do
     # 默认参数
-    Math.add2(1)
+    if 1 == 1 do
+      Math.add2(1)
+    else
+      Math.add2(1, 2)
+    end
+  end
+
+  def call_function2(nil) do
+    "nil"
+  end
+
+  def call_function2(1) do
+    "1"
   end
 end

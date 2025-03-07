@@ -88,6 +88,7 @@ defmodule CodemapEx.Helper.Ast do
 
     # 收集模块中的所有别名定义
     aliases = extract_aliases(functions)
+    aliases = Map.put(aliases, :module_name, module_name)
 
     function_blocks =
       functions
@@ -172,13 +173,21 @@ defmodule CodemapEx.Helper.Ast do
   end
 
   # 支持函数特定格式 def func(), do: expr
-  defp extract_function_block({:def, _, [{name, _, _args}, [do: body]]}, aliases)
+  defp extract_function_block({:def, _, [{name, _, _args}, [do: body]]} = ast, aliases)
        when is_atom(name) do
     calls = extract_calls(body, aliases)
+    # 获取函数体的源代码表示
+    source_code =
+      try do
+        Macro.to_string(ast)
+      rescue
+        _ -> "无法转换为源代码"
+      end
 
     %Func{
       name: name,
-      calls: calls
+      calls: calls,
+      source_code: source_code
     }
   end
 
@@ -236,7 +245,8 @@ defmodule CodemapEx.Helper.Ast do
 
         # 处理无参数形式：expr |> func
         {function_name, _, nil} when is_atom(function_name) ->
-          [%Call{module: nil, name: function_name, arity: 1}]
+          module = Map.get(aliases, :module_name, nil)
+          [%Call{module: module, name: function_name, arity: 1}]
 
         # 处理其他形式
         _ ->
@@ -283,7 +293,13 @@ defmodule CodemapEx.Helper.Ast do
   # 处理普通函数调用 (function(...))
   defp extract_calls({function_name, _, args}, aliases)
        when is_atom(function_name) and is_list(args) do
-    call = %Call{module: nil, name: function_name, arity: length(args)}
+    # 如果是 Kernel 模块的函数，设置为 Kernel，否则设置为当前模块的函数
+    module =
+      if function_exported?(Kernel, function_name, length(args)),
+        do: Kernel,
+        else: Map.get(aliases, :module_name, nil)
+
+    call = %Call{module: module, name: function_name, arity: length(args)}
 
     # 收集参数中的调用
     arg_calls = Enum.flat_map(args, &extract_calls(&1, aliases))
