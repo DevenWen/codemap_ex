@@ -175,6 +175,13 @@ defmodule CodemapEx do
     Graph.pretty_print(graph)
   end
 
+  @doc """
+  将调用图转换为 Mermaid 格式。
+
+  ## 参数
+
+    * `graph` - 调用图结构
+  """
   def to_mermaid(graph) do
     Graph.to_mermaid(graph)
   end
